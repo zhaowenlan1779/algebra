@@ -404,7 +404,7 @@ macro_rules! prime_field {
                 })
             });
             let u64s = (0..SAMPLES)
-                .map(|_| rng.next_u64() % 65536)
+                .map(|_| rng.next_u64())
                 .collect::<Vec<_>>();
             conversions.bench_function("From u64", |b| {
                 let mut i = 0;

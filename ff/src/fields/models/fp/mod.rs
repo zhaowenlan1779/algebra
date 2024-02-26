@@ -66,7 +66,7 @@ pub trait FpConfig<const N: usize>: Send + Sync + 'static + Sized {
 
     /// Precomputed lookup table for values 0..2^16 in Montgomery form.
     /// Otherwise, conversion to Montgomery form requires a multiplication by R^2.
-    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<Self, N>; 65536];
+    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<Self, N>; PRECOMP_TABLE_SIZE];
 
     /// Set a += b.
     fn add_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>);

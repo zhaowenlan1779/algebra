@@ -8,6 +8,8 @@ use crate::{
 };
 use ark_ff_macros::unroll_for_loops;
 
+pub const PRECOMP_TABLE_SIZE: usize = 65536;
+
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
 ///
@@ -81,7 +83,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
         sqrt_precomputation::<N, Self>();
 
     #[allow(long_running_const_eval)]
-    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<MontBackend<Self, N>, N>; 65536] =
+    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<MontBackend<Self, N>, N>; PRECOMP_TABLE_SIZE] =
         small_element_montgomery_precomputation::<N, Self>();
 
     /// (MODULUS + 1) / 4 when MODULUS % 4 == 3. Used for square root precomputations.
@@ -363,7 +365,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     }
 
     fn from_u64(r: u64) -> Option<Fp<MontBackend<Self, N>, N>> {
-        if r < 65536 {
+        if r < PRECOMP_TABLE_SIZE as u64 {
             Some(Self::SMALL_ELEMENT_MONTGOMERY_PRECOMP[r as usize])
         } else if BigInt::from(r) >= <MontBackend<Self, N>>::MODULUS {
             None
@@ -577,13 +579,15 @@ pub const fn sqrt_precomputation<const N: usize, T: MontConfig<N>>(
     }
 }
 
+/// Adapted the `bn256-table` feature from `halo2curves`:
+/// https://github.com/privacy-scaling-explorations/halo2curves/blob/main/script/bn256.py
 pub const fn small_element_montgomery_precomputation<const N: usize, T: MontConfig<N>>(
-) -> [Fp<MontBackend<T, N>, N>; 65536] {
-    let mut lookup_table: [Fp<MontBackend<T, N>, N>; 65536] =
-        [<Fp<MontBackend<T, N>, N>>::ZERO; 65536];
+) -> [Fp<MontBackend<T, N>, N>; PRECOMP_TABLE_SIZE] {
+    let mut lookup_table: [Fp<MontBackend<T, N>, N>; PRECOMP_TABLE_SIZE] =
+        [<Fp<MontBackend<T, N>, N>>::ZERO; PRECOMP_TABLE_SIZE];
 
     let mut i: usize = 1;
-    while i < 65536 {
+    while i < PRECOMP_TABLE_SIZE {
         let mut limbs = [0u64; N];
         limbs[0] = i as u64;
         lookup_table[i] = <Fp<MontBackend<T, N>, N>>::new(BigInt::new(limbs));
@@ -657,7 +661,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
     const SMALL_SUBGROUP_BASE_ADICITY: Option<u32> = T::SMALL_SUBGROUP_BASE_ADICITY;
     const LARGE_SUBGROUP_ROOT_OF_UNITY: Option<Fp<Self, N>> = T::LARGE_SUBGROUP_ROOT_OF_UNITY;
     const SQRT_PRECOMP: Option<crate::SqrtPrecomputation<Fp<Self, N>>> = T::SQRT_PRECOMP;
-    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<Self, N>; 65536] =
+    const SMALL_ELEMENT_MONTGOMERY_PRECOMP: [Fp<Self, N>; PRECOMP_TABLE_SIZE] =
         T::SMALL_ELEMENT_MONTGOMERY_PRECOMP;
 
     fn add_assign(a: &mut Fp<Self, N>, b: &Fp<Self, N>) {
