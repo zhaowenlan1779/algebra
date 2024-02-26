@@ -1,8 +1,11 @@
 use ark_std::{marker::PhantomData, Zero};
 
 use super::{Fp, FpConfig};
-use crate::{biginteger::arithmetic as fa, BigInt, BigInteger, PrimeField, SqrtPrecomputation};
-use crate::fields::Field;
+use crate::{
+    biginteger::arithmetic::{self as fa},
+    fields::Field,
+    BigInt, BigInteger, PrimeField, SqrtPrecomputation,
+};
 use ark_ff_macros::unroll_for_loops;
 
 /// A trait that specifies the constants and arithmetic procedures
@@ -362,8 +365,10 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     fn from_u64(r: u64) -> Option<Fp<MontBackend<Self, N>, N>> {
         if r < 65536 {
             Some(Self::SMALL_ELEMENT_MONTGOMERY_PRECOMP[r as usize])
+        } else if BigInt::from(r) >= <MontBackend<Self, N>>::MODULUS {
+            None
         } else {
-            Self::from_bigint(r.into())
+            Some(Fp::new_unchecked(Self::R2).mul_u64(r))
         }
     }
 
@@ -708,7 +713,7 @@ impl<T: MontConfig<N>, const N: usize> FpConfig<N> for MontBackend<T, N> {
 
     fn from_u64(r: u64) -> Option<Fp<Self, N>> {
         T::from_u64(r)
-    }    
+    }
 }
 
 impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
@@ -821,6 +826,37 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
         }
     }
 
+    #[unroll_for_loops(12)]
+    #[inline(always)]
+    pub fn mul_u64(mut self, other: u64) -> Self {
+        let (mut lo, mut hi) = ([0u64; N], [0u64; N]);
+
+        for i in 0..N - 1 {
+            lo[i] = mac_with_carry!(lo[i], (self.0).0[i], other, &mut lo[i + 1]);
+        }
+        lo[N - 1] = mac_with_carry!(lo[N - 1], (self.0).0[N - 1], other, &mut hi[0]);
+
+        // Montgomery reduction
+        let mut carry2 = 0;
+        for i in 0..N {
+            let tmp = lo[i].wrapping_mul(T::INV);
+            let mut carry = 0u64;
+            mac!(lo[i], tmp, T::MODULUS.0[0], &mut carry);
+            for j in 1..N {
+                let k: usize = i + j;
+                if k >= N {
+                    hi[k - N] = mac_with_carry!(hi[k - N], tmp, T::MODULUS.0[j], &mut carry);
+                } else {
+                    lo[k] = mac_with_carry!(lo[k], tmp, T::MODULUS.0[j], &mut carry);
+                }
+            }
+            hi[i] = adc!(hi[i], carry, &mut carry2);
+        }
+
+(self.0).0 = hi;
+        self.const_subtract_modulus_with_carry(carry2 != 0)
+    }
+
     const fn const_is_valid(&self) -> bool {
         crate::const_for!((i in 0..N) {
             if (self.0).0[N - i - 1] < T::MODULUS.0[N - i - 1] {
@@ -855,9 +891,20 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
 
 #[cfg(test)]
 mod test {
-    use ark_std::{str::FromStr, vec::Vec};
+    use ark_std::{rand::RngCore, str::FromStr};
     use ark_test_curves::secp256k1::Fr;
     use num_bigint::{BigInt, BigUint, Sign};
+
+    #[test]
+    fn test_mul_u64() {
+        let r2 = Fr::new_unchecked(Fr::R2);
+        let mut rng = ark_std::test_rng();
+        let value = rng.next_u64();
+        assert_eq!(
+            r2.mul_u64(value),
+            r2 * Fr::new_unchecked(value.into())
+        );
+    }
 
     #[test]
     fn test_mont_macro_correctness() {
