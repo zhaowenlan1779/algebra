@@ -8,7 +8,7 @@ use crate::{
 };
 use ark_ff_macros::unroll_for_loops;
 
-pub const PRECOMP_TABLE_SIZE: usize = 65536;
+pub const PRECOMP_TABLE_SIZE: usize = 1 << 14;
 
 /// A trait that specifies the constants and arithmetic procedures
 /// for Montgomery arithmetic over the prime field defined by `MODULUS`.
