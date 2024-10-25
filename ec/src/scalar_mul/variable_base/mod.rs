@@ -109,7 +109,7 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     let zero = V::zero();
     let window_sums: Vec<_> = ark_std::cfg_into_iter!(0..digits_count)
         .map(|i| {
-            let mut buckets = vec![zero; 1 << c];
+            let mut buckets = vec![zero; 1 << (c - 1)];
             for (digits, base) in scalar_digits.chunks(digits_count).zip(bases) {
                 use ark_std::cmp::Ordering;
                 // digits is the digits thing of the first scalar?
