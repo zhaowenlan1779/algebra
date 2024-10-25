@@ -37,7 +37,7 @@ pub(super) fn mul_assign_impl(
         }
         default.extend(quote!((a.0).0 = r;));
         // Avoid using assembly for `N == 1`.
-        if (2..=6).contains(&num_limbs) {
+        if (2..=4).contains(&num_limbs) {
             body.extend(quote!({
                 if cfg!(all(
                     feature = "asm",

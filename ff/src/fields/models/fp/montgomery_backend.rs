@@ -160,7 +160,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
     fn mul_assign(a: &mut Fp<MontBackend<Self, N>, N>, b: &Fp<MontBackend<Self, N>, N>) {
         // No-carry optimisation applied to CIOS
         if Self::CAN_USE_NO_CARRY_MUL_OPT {
-            if N <= 6
+            if N <= 4
                 && N > 1
                 && cfg!(all(
                     feature = "asm",
@@ -185,8 +185,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
                     2 => { ark_ff_asm::x86_64_asm_mul!(2, (a.0).0, (b.0).0); },
                     3 => { ark_ff_asm::x86_64_asm_mul!(3, (a.0).0, (b.0).0); },
                     4 => { ark_ff_asm::x86_64_asm_mul!(4, (a.0).0, (b.0).0); },
-                    5 => { ark_ff_asm::x86_64_asm_mul!(5, (a.0).0, (b.0).0); },
-                    6 => { ark_ff_asm::x86_64_asm_mul!(6, (a.0).0, (b.0).0); },
                     _ => unsafe { ark_std::hint::unreachable_unchecked() },
                 };
             } else {
@@ -234,7 +232,7 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
             return;
         }
         if Self::CAN_USE_NO_CARRY_SQUARE_OPT
-            && (2..=6).contains(&N)
+            && (2..=4).contains(&N)
             && cfg!(all(
                 feature = "asm",
                 target_feature = "bmi2",
@@ -254,8 +252,6 @@ pub trait MontConfig<const N: usize>: 'static + Sync + Send + Sized {
                 2 => { ark_ff_asm::x86_64_asm_square!(2, (a.0).0); },
                 3 => { ark_ff_asm::x86_64_asm_square!(3, (a.0).0); },
                 4 => { ark_ff_asm::x86_64_asm_square!(4, (a.0).0); },
-                5 => { ark_ff_asm::x86_64_asm_square!(5, (a.0).0); },
-                6 => { ark_ff_asm::x86_64_asm_square!(6, (a.0).0); },
                 _ => unsafe { ark_std::hint::unreachable_unchecked() },
             };
             a.subtract_modulus();
@@ -895,7 +891,7 @@ impl<T: MontConfig<N>, const N: usize> Fp<MontBackend<T, N>, N> {
 
 #[cfg(test)]
 mod test {
-    use ark_std::{rand::RngCore, str::FromStr};
+    use ark_std::{rand::RngCore, str::FromStr, vec::Vec};
     use ark_test_curves::secp256k1::Fr;
     use num_bigint::{BigInt, BigUint, Sign};
 

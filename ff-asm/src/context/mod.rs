@@ -5,6 +5,7 @@ pub use data_structures::*;
 pub struct Context<'a> {
     assembly_instructions: Vec<String>,
     declarations: Vec<Declaration<'a>>,
+    constants: Vec<Constant<'a>>,
     used_registers: Vec<Register<'a>>,
 }
 
@@ -29,6 +30,7 @@ impl<'a> Context<'a> {
         Self {
             assembly_instructions: Vec::new(),
             declarations: Vec::new(),
+            constants: Vec::new(),
             used_registers: Vec::new(),
         }
     }
@@ -53,6 +55,10 @@ impl<'a> Context<'a> {
         *self.get_decl_name(name).unwrap()
     }
 
+    pub fn get_constant(&self, name: &str) -> Constant<'_> {
+        *self.constants.iter().find(|item| item.name == name).unwrap()
+    }
+
     pub fn get_decl_with_fallback(&self, name: &str, fallback_name: &str) -> Declaration<'_> {
         self.get_decl_name(name)
             .copied()
@@ -62,6 +68,11 @@ impl<'a> Context<'a> {
     pub fn add_declaration(&mut self, name: &'a str, expr: &'a str) {
         let declaration = Declaration { name, expr };
         self.declarations.push(declaration);
+    }
+
+    pub fn add_constant(&mut self, name: &'a str, expr: &'a str) {
+        let constant = Constant { name, expr };
+        self.constants.push(constant);
     }
 
     pub fn add_buffer(&mut self, extra_reg: usize) {
@@ -94,6 +105,12 @@ impl<'a> Context<'a> {
             .map(ToString::to_string)
             .collect::<Vec<String>>()
             .join("\n");
+        let constants: String = self
+            .constants
+            .iter()
+            .map(ToString::to_string)
+            .collect::<Vec<String>>()
+            .join("\n");
         let clobbers = self
             .used_registers
             .iter()
@@ -107,6 +124,7 @@ impl<'a> Context<'a> {
             "ark_std::arch::asm!(".to_string(),
             assembly,
             declarations,
+            constants,
             clobbers,
             options,
             ")".to_string(),
