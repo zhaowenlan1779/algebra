@@ -124,11 +124,9 @@ pub fn mont_config_helper(
 
                 #[inline(always)]
                 fn sub_assign(a: &mut F, b: &F) {
-                    // If `other` is larger than `self`, add the modulus to self first.
-                    if b.0 > a.0 {
+                    if __sub_with_borrow(&mut a.0, &b.0) {
                         __add_with_carry(&mut a.0, &#modulus);
                     }
-                    __sub_with_borrow(&mut a.0, &b.0);
                 }
 
                 #[inline(always)]
