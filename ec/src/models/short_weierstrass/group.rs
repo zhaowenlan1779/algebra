@@ -387,9 +387,11 @@ impl<P: SWCurveConfig, T: Borrow<Affine<P>>> AddAssign<T> for Projective<P> {
                 v *= &i;
 
                 // X3 = r^2 + J - 2*V
-                self.x = r.square();
+                self.x = r;
+                self.x.square_in_place();
                 self.x += &j;
-                self.x -= &v.double();
+                self.x -= &v;
+                self.x -= &v;
 
                 // Y3 = r*(V-X3) + 2*Y1*J
                 v -= &self.x;
