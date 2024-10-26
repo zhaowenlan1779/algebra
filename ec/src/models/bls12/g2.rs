@@ -88,6 +88,13 @@ impl<P: Bls12Config> From<G2Projective<P>> for G2Prepared<P> {
     }
 }
 
+impl<P: Bls12Config> From<G2ExtendedJacobian<P>> for G2Prepared<P> {
+    fn from(q: G2ExtendedJacobian<P>) -> Self {
+        let affine : G2Affine<P> = q.into();
+        affine.into()
+    }
+}
+
 impl<'a, P: Bls12Config> From<&'a G2Affine<P>> for G2Prepared<P> {
     fn from(other: &'a G2Affine<P>) -> Self {
         (*other).into()
@@ -97,6 +104,13 @@ impl<'a, P: Bls12Config> From<&'a G2Affine<P>> for G2Prepared<P> {
 impl<'a, P: Bls12Config> From<&'a G2Projective<P>> for G2Prepared<P> {
     fn from(q: &'a G2Projective<P>) -> Self {
         q.into_affine().into()
+    }
+}
+
+impl<'a, P: Bls12Config> From<&'a G2ExtendedJacobian<P>> for G2Prepared<P> {
+    fn from(q: &'a G2ExtendedJacobian<P>) -> Self {
+        let affine : G2Affine<P> = (*q).into();
+        affine.into()
     }
 }
 

@@ -49,8 +49,10 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         + CanonicalDeserialize
         + for<'a> From<&'a Self::G1>
         + for<'a> From<&'a Self::G1Affine>
+        + for<'a> From<&'a Self::G1MSM>
         + From<Self::G1>
-        + From<Self::G1Affine>;
+        + From<Self::G1Affine>
+        + From<Self::G1MSM>;
     
     /// A G1 element that is best suited for fast MSM.
     type G1MSM: VariableBaseMSM
@@ -80,8 +82,10 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         + CanonicalDeserialize
         + for<'a> From<&'a Self::G2>
         + for<'a> From<&'a Self::G2Affine>
+        + for<'a> From<&'a Self::G2MSM>
         + From<Self::G2>
-        + From<Self::G2Affine>;
+        + From<Self::G2Affine>
+        + From<Self::G2MSM>;
     
     type G2MSM: VariableBaseMSM
         + ScalarMul<MulBase = Self::G2Affine, ScalarField = Self::ScalarField>
