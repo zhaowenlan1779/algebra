@@ -237,9 +237,11 @@ impl<P: MNT6Config> Pairing for MNT6<P> {
     type G1 = G1Projective<P>;
     type G1Affine = G1Affine<P>;
     type G1Prepared = G1Prepared<P>;
+    type G1MSM = Self::G1;
     type G2 = G2Projective<P>;
     type G2Affine = G2Affine<P>;
     type G2Prepared = G2Prepared<P>;
+    type G2MSM = Self::G2;
     type TargetField = Fp6<P::Fp6Config>;
 
     fn multi_miller_loop(

@@ -6,12 +6,13 @@ use num_traits::One;
 use crate::{
     bn::{BnConfig, TwistType},
     models::short_weierstrass::SWCurveConfig,
-    short_weierstrass::{Affine, Projective},
+    short_weierstrass::{Affine, Projective, ExtendedJacobian},
     AffineRepr, CurveGroup,
 };
 
 pub type G2Affine<P> = Affine<<P as BnConfig>::G2Config>;
 pub type G2Projective<P> = Projective<<P as BnConfig>::G2Config>;
+pub type G2ExtendedJacobian<P> = ExtendedJacobian<<P as BnConfig>::G2Config>;
 
 #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
 #[derivative(

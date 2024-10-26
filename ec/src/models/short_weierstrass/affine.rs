@@ -18,7 +18,7 @@ use ark_ff::{fields::Field, PrimeField, ToConstraintField, UniformRand};
 
 use zeroize::Zeroize;
 
-use super::{Projective, SWCurveConfig, SWFlags};
+use super::{ExtendedJacobian, Projective, SWCurveConfig, SWFlags};
 use crate::AffineRepr;
 
 /// Affine coordinates for a point on an elliptic curve in short Weierstrass
@@ -337,6 +337,32 @@ impl<P: SWCurveConfig> From<Projective<P>> for Affine<P> {
 
             // Y/Z^3
             let y = p.y * &(zinv_squared * &zinv);
+
+            Affine::new_unchecked(x, y)
+        }
+    }
+}
+
+// The projective point X, Y, ZZ, ZZZ is represented in the affine
+// coordinates as X/ZZ, Y/ZZZ
+impl<P: SWCurveConfig> From<ExtendedJacobian<P>> for Affine<P> {
+    #[inline]
+    fn from(p: ExtendedJacobian<P>) -> Affine<P> {
+        if p.is_zero() {
+            Affine::identity()
+        } else if p.zz.is_one() {
+            // If Z is one, the point is already normalized.
+            Affine::new_unchecked(p.x, p.y)
+        } else {
+            // Z is nonzero, so it must have an inverse in a field.
+            let zzinv = p.zz.inverse().unwrap();
+            let zzzinv = p.zzz.inverse().unwrap();
+
+            // X/ZZ
+            let x = p.x * &zzinv;
+
+            // Y/ZZZ
+            let y = p.y * &zzzinv;
 
             Affine::new_unchecked(x, y)
         }

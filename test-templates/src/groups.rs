@@ -164,7 +164,7 @@ macro_rules! __test_group {
     ($group:ty; msm) => {
         #[test]
         fn test_var_base_msm() {
-            $crate::msm::test_var_base_msm::<$group>();
+            $crate::msm::test_var_base_msm::<$group, $group>();
         }
 
         #[test]
@@ -303,6 +303,87 @@ macro_rules! __test_group {
                     }
 
                 }
+            }
+        }
+
+        mod extjac {
+            use super::*;
+            use ark_ec::short_weierstrass::ExtendedJacobian;
+            type ExtJac = ExtendedJacobian<Config>;
+
+            $crate::__test_group!(ExtJac);
+
+            #[test]
+            fn test_ext_jac_affine_conversion() {
+                let mut rng = &mut ark_std::test_rng();
+
+                for _ in 0..ITERATIONS {
+                    let g = ExtJac::rand(&mut rng);
+                    let g_affine : Affine = g.into();
+                    let g_extjac : ExtJac = g_affine.into();
+                    assert_eq!(g, g_extjac);
+                }
+
+                // Batch normalization
+                for _ in 0..10 {
+                    let mut v = (0..ITERATIONS)
+                        .map(|_| ExtJac::rand(&mut rng).double())
+                        .collect::<Vec<_>>();
+
+                    use ark_std::rand::distributions::{Distribution, Uniform};
+                    let between = Uniform::from(0..ITERATIONS);
+                    // Sprinkle in some normalized points
+                    for _ in 0..5 {
+                        v[between.sample(&mut rng)] = ExtJac::zero();
+                    }
+                    for _ in 0..5 {
+                        let s = between.sample(&mut rng);
+                        let affine : Affine = v[s].into();
+                        v[s] = affine.into();
+                    }
+
+                    let expected_v : Vec<Affine> = v.iter().map(|v| (*v).into()).collect();
+                    let actual_v = ExtJac::normalize_batch(&v);
+
+                    assert_eq!(actual_v, expected_v);
+                }
+            }
+
+            #[test]
+            fn test_ext_jac_mixed_addition() {
+                let rng = &mut ark_std::test_rng();
+                for _ in 0..ITERATIONS {
+                    let a = Affine::rand(rng);
+                    let a_extjac : ExtJac = a.into();
+                    let b = ExtJac::rand(rng);
+                    let b_affine : Affine = b.into();
+                    assert!(a.is_on_curve());
+
+                    let sum = a + b_affine;
+                    let sum_extjac : ExtJac = sum.into();
+                    assert_eq!(b + a, sum_extjac, "b + a failed on input {a}, {b}");
+                    assert_eq!(a_extjac + b, sum_extjac, "a + b failed on input {a}, {b}");
+                }
+            }
+
+            #[test]
+            fn test_ext_jac_double() {
+                let rng = &mut ark_std::test_rng();
+                for _ in 0..ITERATIONS {
+                    let mut a = <$group>::rand(rng);
+                    let mut a_extjac : ExtJac = a.into();
+                    a.double_in_place();
+                    a_extjac.double_in_place();
+
+                    let dbl_extjac : ExtJac = a.into();
+                    
+                    assert_eq!(dbl_extjac, a_extjac);
+                }
+            }
+
+            #[test]
+            fn test_var_base_msm() {
+                $crate::msm::test_var_base_msm::<ExtJac, $group>();
             }
         }
     };

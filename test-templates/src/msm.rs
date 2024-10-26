@@ -3,9 +3,11 @@ use ark_ec::{
     ScalarMul,
 };
 use ark_ff::{PrimeField, UniformRand};
-use ark_std::vec::Vec;
+use ark_std::{vec::Vec, ops::Mul};
 
-fn naive_var_base_msm<G: ScalarMul>(bases: &[G::MulBase], scalars: &[G::ScalarField]) -> G {
+fn naive_var_base_msm<G: ScalarMul>(bases: &[G::MulBase], scalars: &[G::ScalarField]) -> G
+    where G::MulBase : for<'a> Mul<&'a G::ScalarField, Output = G>
+{
     let mut acc = G::zero();
 
     for (base, scalar) in bases.iter().zip(scalars.iter()) {
@@ -14,7 +16,12 @@ fn naive_var_base_msm<G: ScalarMul>(bases: &[G::MulBase], scalars: &[G::ScalarFi
     acc
 }
 
-pub fn test_var_base_msm<G: VariableBaseMSM>() {
+pub fn test_var_base_msm<G: VariableBaseMSM, R>()
+where
+    R: VariableBaseMSM<MulBase = G::MulBase, ScalarField = G::ScalarField>,
+    R::MulBase : for<'a> Mul<&'a R::ScalarField, Output = R>,
+    R: Into<G>,
+{
     const SAMPLES: usize = 1 << 10;
 
     let mut rng = ark_std::test_rng();
@@ -25,7 +32,7 @@ pub fn test_var_base_msm<G: VariableBaseMSM>() {
     let g = (0..SAMPLES).map(|_| G::rand(&mut rng)).collect::<Vec<_>>();
     let g = G::batch_convert_to_mul_base(&g);
 
-    let naive = naive_var_base_msm::<G>(g.as_slice(), v.as_slice());
+    let naive : G = naive_var_base_msm::<R>(g.as_slice(), v.as_slice()).into();
     let fast = G::msm(g.as_slice(), v.as_slice()).unwrap();
 
     assert_eq!(naive, fast);

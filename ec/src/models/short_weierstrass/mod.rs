@@ -16,6 +16,9 @@ pub use affine::*;
 mod group;
 pub use group::*;
 
+mod extended_jacobian;
+pub use extended_jacobian::*;
+
 mod serialization_flags;
 pub use serialization_flags::*;
 
@@ -91,10 +94,34 @@ pub trait SWCurveConfig: super::CurveConfig {
         res
     }
 
+    fn mul_extended_jac(base: &ExtendedJacobian<Self>, scalar: &[u64]) -> ExtendedJacobian<Self> {
+        let mut res = ExtendedJacobian::<Self>::zero();
+        for b in ark_ff::BitIteratorBE::without_leading_zeros(scalar) {
+            res.double_in_place();
+            if b {
+                res += base;
+            }
+        }
+
+        res
+    }
+
     /// Default implementation of group multiplication for affine
     /// coordinates.
     fn mul_affine(base: &Affine<Self>, scalar: &[u64]) -> Projective<Self> {
         let mut res = Projective::<Self>::zero();
+        for b in ark_ff::BitIteratorBE::without_leading_zeros(scalar) {
+            res.double_in_place();
+            if b {
+                res += base
+            }
+        }
+
+        res
+    }
+
+    fn mul_affine_extended_jac(base: &Affine<Self>, scalar: &[u64]) -> ExtendedJacobian<Self> {
+        let mut res = ExtendedJacobian::<Self>::zero();
         for b in ark_ff::BitIteratorBE::without_leading_zeros(scalar) {
             res.double_in_place();
             if b {

@@ -301,9 +301,11 @@ impl<P: BW6Config> Pairing for BW6<P> {
     type G1 = G1Projective<P>;
     type G1Affine = G1Affine<P>;
     type G1Prepared = G1Prepared<P>;
+    type G1MSM = Self::G1;
     type G2 = G2Projective<P>;
     type G2Affine = G2Affine<P>;
     type G2Prepared = G2Prepared<P>;
+    type G2MSM = Self::G2;
     type TargetField = Fp6<P::Fp6Config>;
 
     fn final_exponentiation(f: MillerLoopOutput<Self>) -> Option<PairingOutput<Self>> {

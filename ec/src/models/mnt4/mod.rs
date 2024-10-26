@@ -230,9 +230,11 @@ impl<P: MNT4Config> Pairing for MNT4<P> {
     type G1 = G1Projective<P>;
     type G1Affine = G1Affine<P>;
     type G1Prepared = G1Prepared<P>;
+    type G1MSM = Self::G1;
     type G2 = G2Projective<P>;
     type G2Affine = G2Affine<P>;
     type G2Prepared = G2Prepared<P>;
+    type G2MSM = Self::G2;
     type TargetField = Fp4<P::Fp4Config>;
 
     fn multi_miller_loop(

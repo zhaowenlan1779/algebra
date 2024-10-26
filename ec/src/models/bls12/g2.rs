@@ -5,12 +5,13 @@ use ark_std::{vec::Vec, One};
 use crate::{
     bls12::{Bls12Config, TwistType},
     models::short_weierstrass::SWCurveConfig,
-    short_weierstrass::{Affine, Projective},
+    short_weierstrass::{Affine, ExtendedJacobian, Projective},
     AffineRepr, CurveGroup,
 };
 
 pub type G2Affine<P> = Affine<<P as Bls12Config>::G2Config>;
 pub type G2Projective<P> = Projective<<P as Bls12Config>::G2Config>;
+pub type G2ExtendedJacobian<P> = ExtendedJacobian<<P as Bls12Config>::G2Config>;
 
 #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
 #[derivative(

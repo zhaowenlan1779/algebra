@@ -36,8 +36,8 @@ pub trait ScalarMul:
         + Copy
         + Eq
         + core::hash::Hash
-        + Mul<Self::ScalarField, Output = Self>
-        + for<'a> Mul<&'a Self::ScalarField, Output = Self>
+        // + Mul<Self::ScalarField, Output = Self>
+        // + for<'a> Mul<&'a Self::ScalarField, Output = Self>
         + Neg<Output = Self::MulBase>;
 
     const NEGATION_IS_CHEAP: bool;

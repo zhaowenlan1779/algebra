@@ -1,6 +1,6 @@
 use crate::{
     bn::BnConfig,
-    short_weierstrass::{Affine, Projective},
+    short_weierstrass::{Affine, ExtendedJacobian, Projective},
     AffineRepr, CurveGroup,
 };
 use ark_serialize::*;
@@ -8,6 +8,7 @@ use ark_std::vec::Vec;
 
 pub type G1Affine<P> = Affine<<P as BnConfig>::G1Config>;
 pub type G1Projective<P> = Projective<<P as BnConfig>::G1Config>;
+pub type G1ExtendedJacobian<P> = ExtendedJacobian<<P as BnConfig>::G1Config>;
 
 #[derive(Derivative, CanonicalSerialize, CanonicalDeserialize)]
 #[derivative(

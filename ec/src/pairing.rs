@@ -16,7 +16,7 @@ use ark_std::{
 };
 use zeroize::Zeroize;
 
-use crate::{AffineRepr, CurveGroup, Group, VariableBaseMSM};
+use crate::{AffineRepr, CurveGroup, Group, ScalarMul, VariableBaseMSM};
 
 /// Collection of types (mainly fields and curves) that together describe
 /// how to compute a pairing over a pairing-friendly curve.
@@ -51,6 +51,11 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         + for<'a> From<&'a Self::G1Affine>
         + From<Self::G1>
         + From<Self::G1Affine>;
+    
+    /// A G1 element that is best suited for fast MSM.
+    type G1MSM: VariableBaseMSM
+        + ScalarMul<MulBase = Self::G1Affine, ScalarField = Self::ScalarField>
+        + Into<Self::G1Affine>;
 
     /// An element of G2.
     type G2: CurveGroup<ScalarField = Self::ScalarField, Affine = Self::G2Affine>
@@ -77,6 +82,10 @@ pub trait Pairing: Sized + 'static + Copy + Debug + Sync + Send + Eq {
         + for<'a> From<&'a Self::G2Affine>
         + From<Self::G2>
         + From<Self::G2Affine>;
+    
+    type G2MSM: VariableBaseMSM
+        + ScalarMul<MulBase = Self::G2Affine, ScalarField = Self::ScalarField>
+        + Into<Self::G2Affine>;
 
     /// The extension field that hosts the target group of the pairing.
     type TargetField: CyclotomicMultSubgroup;

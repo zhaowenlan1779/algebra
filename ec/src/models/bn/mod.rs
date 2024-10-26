@@ -170,8 +170,8 @@ pub mod g1;
 pub mod g2;
 
 pub use self::{
-    g1::{G1Affine, G1Prepared, G1Projective},
-    g2::{G2Affine, G2Prepared, G2Projective},
+    g1::{G1Affine, G1Prepared, G1Projective, G1ExtendedJacobian},
+    g2::{G2Affine, G2Prepared, G2Projective, G2ExtendedJacobian},
 };
 
 #[derive(Derivative)]
@@ -214,9 +214,11 @@ impl<P: BnConfig> Pairing for Bn<P> {
     type G1 = G1Projective<P>;
     type G1Affine = G1Affine<P>;
     type G1Prepared = G1Prepared<P>;
+    type G1MSM = G1ExtendedJacobian<P>;
     type G2 = G2Projective<P>;
     type G2Affine = G2Affine<P>;
     type G2Prepared = G2Prepared<P>;
+    type G2MSM = G2ExtendedJacobian<P>;
     type TargetField = Fp12<P::Fp12Config>;
 
     fn multi_miller_loop(
