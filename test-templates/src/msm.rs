@@ -16,6 +16,28 @@ fn naive_var_base_msm<G: ScalarMul>(bases: &[G::MulBase], scalars: &[G::ScalarFi
     acc
 }
 
+pub fn test_var_base_msm_small<G: VariableBaseMSM, R>()
+where
+    R: VariableBaseMSM<MulBase = G::MulBase, ScalarField = G::ScalarField>,
+    R::MulBase : for<'a> Mul<&'a R::ScalarField, Output = R>,
+    R: Into<G>,
+{
+    const SAMPLES: usize = 1 << 4;
+
+    let mut rng = ark_std::test_rng();
+
+    let v = (0..SAMPLES)
+        .map(|_| G::ScalarField::rand(&mut rng))
+        .collect::<Vec<_>>();
+    let g = (0..SAMPLES).map(|_| G::rand(&mut rng)).collect::<Vec<_>>();
+    let g = G::batch_convert_to_mul_base(&g);
+
+    let naive : G = naive_var_base_msm::<R>(g.as_slice(), v.as_slice()).into();
+    let fast = G::msm(g.as_slice(), v.as_slice()).unwrap();
+
+    assert_eq!(naive, fast);
+}
+
 pub fn test_var_base_msm<G: VariableBaseMSM, R>()
 where
     R: VariableBaseMSM<MulBase = G::MulBase, ScalarField = G::ScalarField>,

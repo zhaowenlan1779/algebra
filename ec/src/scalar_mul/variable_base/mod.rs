@@ -102,11 +102,18 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
 
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
     let digits_count = (num_bits + c - 1) / c;
+
     let scalar_digits = make_digits(scalars, c, num_bits);
     let zero = V::zero();
     let window_sums: Vec<_> = ark_std::cfg_into_iter!(0..digits_count)
         .map(|i| {
-            let mut buckets = vec![zero; 1 << (c - 1)];
+            let mut buckets = if i == digits_count - 1 {
+                // No borrow for the last digit
+                let final_size = num_bits - (digits_count - 1) * c;
+                vec![zero; 1 << final_size]
+            } else {
+                vec![zero; 1 << (c - 1)]
+            };
             for (digit, base) in scalar_digits[i * size..(i + 1) * size].iter().zip(bases) {
                 use ark_std::cmp::Ordering;
                 // digits is the digits thing of the first scalar?
@@ -235,11 +242,6 @@ fn msm_bigint<V: VariableBaseMSM>(
 fn make_digits<BigInt : BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> Vec<i64> {
     let radix: u64 = 1 << w;
     let window_mask: u64 = radix - 1;
-    let num_bits = if num_bits == 0 {
-        a[0].num_bits() as usize
-    } else {
-        num_bits
-    };
     let digits_count = (num_bits + w - 1) / w;
 
     let mut digits = vec![0i64; digits_count * a.len()];
@@ -271,6 +273,8 @@ fn make_digits<BigInt : BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> 
             digits[i * a.len() + j] = (coef as i64) - (carry << w) as i64;
         }
 
+        // Restore the carry for the last digit
+        // The last digit is in [0, 2^w)
         digits[(digits_count - 1) * a.len() + j] += (carry << w) as i64;
     }
 

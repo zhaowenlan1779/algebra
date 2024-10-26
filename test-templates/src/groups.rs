@@ -163,6 +163,11 @@ macro_rules! __test_group {
     };
     ($group:ty; msm) => {
         #[test]
+        fn test_var_base_msm_small() {
+            $crate::msm::test_var_base_msm_small::<$group, $group>();
+        }
+
+        #[test]
         fn test_var_base_msm() {
             $crate::msm::test_var_base_msm::<$group, $group>();
         }
