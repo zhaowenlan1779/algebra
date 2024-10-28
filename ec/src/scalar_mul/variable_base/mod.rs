@@ -157,7 +157,7 @@ fn compute_c(size: usize, _num_bits: usize) -> usize {
     if size < 32 {
         3
     } else {
-        super::ln_without_floats(size) + 2
+        super::ln_without_floats(size) + 3
     }
 }
 
