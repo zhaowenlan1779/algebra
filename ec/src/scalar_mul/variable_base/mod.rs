@@ -24,8 +24,21 @@ pub trait VariableBaseMSM: ScalarMul {
         Self::msm_bigint(bases, &bigints)
     }
 
-    fn msm_unchecked_par(bases: &[Self::MulBase], scalars: &[Self::ScalarField],
-        num_tasks: usize) -> Self {
+    #[cfg(not(feature = "parallel"))]
+    fn msm_unchecked_par(
+        bases: &[Self::MulBase],
+        scalars: &[Self::ScalarField],
+        _num_tasks: usize,
+    ) -> Self {
+        Self::msm_unchecked(bases, scalars)
+    }
+
+    #[cfg(feature = "parallel")]
+    fn msm_unchecked_par(
+        bases: &[Self::MulBase],
+        scalars: &[Self::ScalarField],
+        num_tasks: usize,
+    ) -> Self {
         let num_bits = Self::ScalarField::MODULUS_BIT_SIZE as usize;
         let size = ark_std::cmp::min(bases.len(), scalars.len());
         let c = compute_c(size, num_bits);
@@ -36,23 +49,45 @@ pub trait VariableBaseMSM: ScalarMul {
 
         let num_chunks = (num_tasks + digits_count - 1) / digits_count;
         let chunk_size = (size + num_chunks - 1) / num_chunks;
-        ark_std::cfg_into_iter!(0..num_chunks)
-            .map(|i| {
-                let (bases, scalars) = if i == num_chunks - 1 {
-                    (&bases[i*chunk_size..], &scalars[i*chunk_size..])
-                } else {
-                    (&bases[i * chunk_size..(i + 1) * chunk_size], &scalars[i * chunk_size..(i + 1) * chunk_size])
-                };
-                Self::msm_unchecked(bases, scalars)
-            })
-            .sum()
+
+        let (sender, receiver) = std::sync::mpsc::sync_channel(num_chunks);
+        let mut sum = Self::zero();
+
+        let process_chunk = |i| {
+            let (bases, scalars) = if i == num_chunks - 1 {
+                (&bases[i * chunk_size..], &scalars[i * chunk_size..])
+            } else {
+                (
+                    &bases[i * chunk_size..(i + 1) * chunk_size],
+                    &scalars[i * chunk_size..(i + 1) * chunk_size],
+                )
+            };
+            sender.send(Self::msm_unchecked(bases, scalars)).unwrap();
+        };
+
+        // The original code uses rayon. Unfortunately, experiments have shown that
+        // rayon does quite sub-optimally for this particular instance, and directly
+        // spawning threads was faster.
+        std::thread::scope(|s| {
+            for i in 0..num_chunks {
+                let process_digit = &process_chunk;
+                s.spawn(move || {
+                    process_chunk(i);
+                });
+            }
+        });
+        for i in 0..num_chunks {
+            sum += receiver.recv().unwrap();
+        }
+
+        sum
     }
 
     fn msm_unchecked_par_auto(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
         #[cfg(feature = "parallel")]
-        let num_tasks = rayon::current_num_threads();
+        let num_tasks = std::thread::available_parallelism().unwrap().get();
         #[cfg(not(feature = "parallel"))]
-        let num_tasks = 1;        
+        let num_tasks = 1;
 
         Self::msm_unchecked_par(bases, scalars, num_tasks)
     }
@@ -118,10 +153,7 @@ pub trait VariableBaseMSM: ScalarMul {
     }
 }
 
-fn compute_c(
-    size: usize,
-    _num_bits: usize,
-) -> usize {
+fn compute_c(size: usize, _num_bits: usize) -> usize {
     if size < 32 {
         3
     } else {
@@ -144,35 +176,52 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
 
     let scalar_digits = make_digits(scalars, c, num_bits);
     let zero = V::zero();
-    let window_sums: Vec<_> = ark_std::cfg_into_iter!(0..digits_count)
-        .map(|i| {
-            let mut buckets = if i == digits_count - 1 {
-                // No borrow for the last digit
-                let final_size = num_bits - (digits_count - 1) * c;
-                vec![zero; 1 << final_size]
-            } else {
-                vec![zero; 1 << (c - 1)]
-            };
-            for (digit, base) in scalar_digits[i * size..(i + 1) * size].iter().zip(bases) {
-                use ark_std::cmp::Ordering;
-                // digits is the digits thing of the first scalar?
-                let scalar = *digit;
-                match 0.cmp(&scalar) {
-                    Ordering::Less => buckets[(scalar - 1) as usize] += base,
-                    Ordering::Greater => buckets[(-scalar - 1) as usize] -= base,
-                    Ordering::Equal => (),
-                }
-            }
+    let mut window_sums = vec![zero; digits_count];
 
-            let mut running_sum = V::zero();
-            let mut res = V::zero();
-            buckets.into_iter().rev().for_each(|b| {
-                running_sum += &b;
-                res += &running_sum;
+    let process_digit = |i: usize, out: &mut V| {
+        let mut buckets = if i == digits_count - 1 {
+            // No borrow for the last digit
+            let final_size = num_bits - (digits_count - 1) * c;
+            vec![zero; 1 << final_size]
+        } else {
+            vec![zero; 1 << (c - 1)]
+        };
+        for (digit, base) in scalar_digits[i * size..(i + 1) * size].iter().zip(bases) {
+            use ark_std::cmp::Ordering;
+            // digits is the digits thing of the first scalar?
+            let scalar = *digit;
+            match 0.cmp(&scalar) {
+                Ordering::Less => buckets[(scalar - 1) as usize] += base,
+                Ordering::Greater => buckets[(-scalar - 1) as usize] -= base,
+                Ordering::Equal => (),
+            }
+        }
+
+        let mut running_sum = V::zero();
+        *out = V::zero();
+        buckets.into_iter().rev().for_each(|b| {
+            running_sum += &b;
+            *out += &running_sum;
+        });
+    };
+
+    // The original code uses rayon. Unfortunately, experiments have shown that
+    // rayon does quite sub-optimally for this particular instance, and directly
+    // spawning threads was faster.
+    #[cfg(feature = "parallel")]
+    std::thread::scope(|s| {
+        for (i, out) in window_sums.iter_mut().enumerate() {
+            let process_digit = &process_digit;
+            s.spawn(move || {
+                process_digit(i, out);
             });
-            res
-        })
-        .collect();
+        }
+    });
+
+    #[cfg(not(feature = "parallel"))]
+    for (i, out) in window_sums.iter_mut().enumerate() {
+        process_digit(i, out);
+    }
 
     // We store the sum for the highest window.
     let mut total = *window_sums.last().unwrap();
@@ -273,7 +322,7 @@ fn msm_bigint<V: VariableBaseMSM>(
     total
 }
 
-fn make_digits<BigInt : BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> Vec<i64> {
+fn make_digits<BigInt: BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> Vec<i64> {
     let radix: u64 = 1 << w;
     let window_mask: u64 = radix - 1;
     let digits_count = (num_bits + w - 1) / w;
@@ -283,7 +332,7 @@ fn make_digits<BigInt : BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> 
     for (j, scalar) in a.iter().enumerate() {
         let scalar = scalar.as_ref();
         let mut carry = 0u64;
-        
+
         for i in 0..digits_count {
             // Construct a buffer of bits of the scalar, starting at `bit_offset`.
             let bit_offset = i * w;
