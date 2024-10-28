@@ -70,7 +70,6 @@ pub trait VariableBaseMSM: ScalarMul {
         // spawning threads was faster.
         std::thread::scope(|s| {
             for i in 0..num_chunks {
-                let process_digit = &process_chunk;
                 s.spawn(move || {
                     process_chunk(i);
                 });
@@ -174,7 +173,11 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     let c = compute_c(size, num_bits);
     let digits_count = (num_bits + c - 1) / c;
 
+    let start = std::time::Instant::now();
     let scalar_digits = make_digits(scalars, c, num_bits);
+    if size >= 1 << 19 {
+        println!("Scalar digits: {} ns", start.elapsed().as_nanos());
+    }
     let zero = V::zero();
     let mut window_sums = vec![zero; digits_count];
 
@@ -211,7 +214,6 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     #[cfg(feature = "parallel")]
     std::thread::scope(|s| {
         for (i, out) in window_sums.iter_mut().enumerate() {
-            let process_digit = &process_digit;
             s.spawn(move || {
                 process_digit(i, out);
             });
