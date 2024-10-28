@@ -24,6 +24,39 @@ pub trait VariableBaseMSM: ScalarMul {
         Self::msm_bigint(bases, &bigints)
     }
 
+    fn msm_unchecked_par(bases: &[Self::MulBase], scalars: &[Self::ScalarField],
+        num_tasks: usize) -> Self {
+        let num_bits = Self::ScalarField::MODULUS_BIT_SIZE as usize;
+        let size = ark_std::cmp::min(bases.len(), scalars.len());
+        let c = compute_c(size, num_bits);
+        let digits_count = (num_bits + c - 1) / c;
+        if digits_count >= num_tasks {
+            return Self::msm_unchecked(bases, scalars);
+        }
+
+        let num_chunks = (num_tasks + digits_count - 1) / digits_count;
+        let chunk_size = (size + num_chunks - 1) / num_chunks;
+        ark_std::cfg_into_iter!(0..num_chunks)
+            .map(|i| {
+                let (bases, scalars) = if i == num_chunks - 1 {
+                    (&bases[i*chunk_size..], &scalars[i*chunk_size..])
+                } else {
+                    (&bases[i * chunk_size..(i + 1) * chunk_size], &scalars[i * chunk_size..(i + 1) * chunk_size])
+                };
+                Self::msm_unchecked(bases, scalars)
+            })
+            .sum()
+    }
+
+    fn msm_unchecked_par_auto(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
+        #[cfg(feature = "parallel")]
+        let num_tasks = rayon::current_num_threads();
+        #[cfg(not(feature = "parallel"))]
+        let num_tasks = 1;        
+
+        Self::msm_unchecked_par(bases, scalars, num_tasks)
+    }
+
     /// Performs multi-scalar multiplication, without checking that `bases.len() == scalars.len()`.
     ///
     /// # Warning
@@ -85,6 +118,17 @@ pub trait VariableBaseMSM: ScalarMul {
     }
 }
 
+fn compute_c(
+    size: usize,
+    _num_bits: usize,
+) -> usize {
+    if size < 32 {
+        3
+    } else {
+        super::ln_without_floats(size) + 2
+    }
+}
+
 // Compute msm using windowed non-adjacent form
 fn msm_bigint_wnaf<V: VariableBaseMSM>(
     bases: &[V::MulBase],
@@ -94,13 +138,8 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     let scalars = &bigints[..size];
     let bases = &bases[..size];
 
-    let c = if size < 32 {
-        3
-    } else {
-        super::ln_without_floats(size) + 2
-    };
-
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
+    let c = compute_c(size, num_bits);
     let digits_count = (num_bits + c - 1) / c;
 
     let scalar_digits = make_digits(scalars, c, num_bits);
@@ -157,13 +196,8 @@ fn msm_bigint<V: VariableBaseMSM>(
     let bases = &bases[..size];
     let scalars_and_bases_iter = scalars.iter().zip(bases).filter(|(s, _)| !s.is_zero());
 
-    let c = if size < 32 {
-        3
-    } else {
-        super::ln_without_floats(size) + 2
-    };
-
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
+    let c = compute_c(size, num_bits);
     let one = V::ScalarField::one().into_bigint();
 
     let zero = V::zero();

@@ -58,6 +58,10 @@ where
     let fast = G::msm(g.as_slice(), v.as_slice()).unwrap();
 
     assert_eq!(naive, fast);
+
+    // Parallel is not enabled by default for tests. Here we test the splitting & combination.
+    let fast_par = G::msm_unchecked_par(g.as_slice(), v.as_slice(), 64);
+    assert_eq!(naive, fast_par);
 }
 
 pub fn test_chunked_pippenger<G: VariableBaseMSM>() {
