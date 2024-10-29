@@ -289,8 +289,9 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     // spawning threads was faster.
     #[cfg(feature = "parallel")]
     std::thread::scope(|s| {
+        let len = window_sums.len();
         for (i, out) in window_sums.iter_mut().enumerate() {
-            if i == window_sums.len() - 1 {
+            if i == len - 1 {
                 process_digit(i, out);
             } else {
                 s.spawn(move || {
