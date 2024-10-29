@@ -18,11 +18,20 @@ pub trait VariableBaseMSM: ScalarMul {
     ///
     /// Reference: [`VariableBaseMSM::msm`]
     fn msm_unchecked(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
+        let start = std::time::Instant::now();
         let mut bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
+        if bases.len() >= 1 << 19 {
+            println!("Into bigint: {}ns", start.elapsed().as_nanos());
+        }
         if Self::NEGATION_IS_CHEAP {
-            msm_bigint_wnaf(bases, &mut bigints)
+            let num_bits = Self::ScalarField::MODULUS_BIT_SIZE as usize;
+            let size = ark_std::cmp::min(bases.len(), bigints.len());
+            let c = compute_c(size, num_bits);
+            process_digits(&mut bigints, c, num_bits);
+
+            msm_bigint_wnaf_body(bases, &mut bigints, c)
         } else {
             msm_bigint(bases, &bigints)
         }
@@ -51,31 +60,29 @@ pub trait VariableBaseMSM: ScalarMul {
             return Self::msm_unchecked(bases, scalars);
         }
 
+        let mut bigints = cfg_into_iter!(scalars)
+            .map(|s| s.into_bigint())
+            .collect::<Vec<_>>();
+        process_digits(&mut bigints, c, num_bits);
+
         let num_chunks = (num_tasks + digits_count - 1) / digits_count;
         let chunk_size = (size + num_chunks - 1) / num_chunks;
 
         let (sender, receiver) = std::sync::mpsc::sync_channel(num_chunks);
         let mut sum = Self::zero();
 
-        let process_chunk = |i| {
-            let (bases, scalars) = if i == num_chunks - 1 {
-                (&bases[i * chunk_size..], &scalars[i * chunk_size..])
-            } else {
-                (
-                    &bases[i * chunk_size..(i + 1) * chunk_size],
-                    &scalars[i * chunk_size..(i + 1) * chunk_size],
-                )
-            };
-            sender.send(Self::msm_unchecked(bases, scalars)).unwrap();
-        };
-
         // The original code uses rayon. Unfortunately, experiments have shown that
         // rayon does quite sub-optimally for this particular instance, and directly
         // spawning threads was faster.
-        rayon::scope(|s| {
+        std::thread::scope(|s| {
+            let mut iter_base = bases.chunks(chunk_size);
+            let mut iter_bigint = bigints.chunks_mut(chunk_size);
+            let sender = &sender;
             for i in 0..num_chunks {
-                s.spawn(move |_| {
-                    process_chunk(i);
+                let base = iter_base.next().unwrap();
+                let bigints = iter_bigint.next().unwrap();
+                s.spawn(move || {
+                    sender.send(msm_bigint_wnaf_body::<Self>(base, bigints, c)).unwrap();
                 });
             }
         });
@@ -115,7 +122,12 @@ pub trait VariableBaseMSM: ScalarMul {
     ) -> Self {
         let mut bigints = bigints.to_vec();
         if Self::NEGATION_IS_CHEAP {
-            msm_bigint_wnaf(bases, &mut bigints)
+            let num_bits = Self::ScalarField::MODULUS_BIT_SIZE as usize;
+            let size = ark_std::cmp::min(bases.len(), bigints.len());
+            let c = compute_c(size, num_bits);
+            process_digits(&mut bigints, c, num_bits);
+
+            msm_bigint_wnaf_body(bases, &mut bigints, c)
         } else {
             msm_bigint(bases, &bigints)
         }
@@ -176,33 +188,33 @@ fn compute_c(size: usize, _num_bits: usize) -> usize {
 }
 
 // Compute msm using windowed non-adjacent form
-fn msm_bigint_wnaf<V: VariableBaseMSM>(
+fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     bases: &[V::MulBase],
     bigints: &mut [<V::ScalarField as PrimeField>::BigInt],
+    c: usize,
 ) -> V {
     let size = ark_std::cmp::min(bases.len(), bigints.len());
     let scalars = &mut bigints[..size];
     let bases = &bases[..size];
 
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
-    let c = compute_c(size, num_bits);
+    // let c = compute_c(size, num_bits);
     let digits_count = (num_bits + c - 1) / c;
 
     // let start = std::time::Instant::now();
-    process_digits(scalars, c, num_bits);
+    // process_digits(scalars, c, num_bits);
     // if size >= 1 << 19 {
         // println!("Scalar digits: {} ns", start.elapsed().as_nanos());
     // }
-    let zero = V::zero();
-    let mut window_sums = vec![zero; digits_count];
+    let mut window_sums = vec![V::zero(); digits_count];
 
     let process_digit = |i: usize, out: &mut V| {
         let mut buckets = if i == digits_count - 1 {
             // No borrow for the last digit
             let final_size = num_bits - (digits_count - 1) * c;
-            vec![zero; 1 << final_size]
+            vec![V::zero(); 1 << final_size]
         } else {
-            vec![zero; 1 << (c - 1)]
+            vec![V::zero(); 1 << (c - 1)]
         };
         let bit_offset = i * c;
         let u64_idx = bit_offset / 64;
