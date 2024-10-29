@@ -228,7 +228,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
         let u64_idx = bit_offset / 64;
         let bit_idx = bit_offset % 64;
 
-        let is_multi_word = bit_idx >= 64 - c && i != digits_count - 1;
+        let is_multi_word = bit_idx > 64 - c && i != digits_count - 1;
         let window_mask = (1 << c) - 1;
         let sign_mask = 1 << (c - 1);
 
@@ -416,7 +416,7 @@ fn process_digits<BigInt: BigInteger>(a: &mut [BigInt], w: usize, num_bits: usiz
             let bit_idx = bit_offset % 64;
 
             // Read the bits from the scalar
-            let is_multi_word = bit_idx >= 64 - w && u64_idx != scalar.len() - 1;
+            let is_multi_word = bit_idx > 64 - w && u64_idx != scalar.len() - 1;
 
             let bit_buf = if is_multi_word {
                 // Combine the current u64's bits with the bits from the next u64
