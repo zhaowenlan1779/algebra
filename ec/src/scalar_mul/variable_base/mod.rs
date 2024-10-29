@@ -89,9 +89,13 @@ pub trait VariableBaseMSM: ScalarMul {
             for i in 0..num_chunks {
                 let base = iter_base.next().unwrap();
                 let bigints = iter_bigint.next().unwrap();
-                s.spawn(move || {
+                if i == num_chunks - 1 {
                     sender.send(msm_bigint_wnaf_body::<Self>(base, bigints, c)).unwrap();
-                });
+                } else {
+                    s.spawn(move || {
+                        sender.send(msm_bigint_wnaf_body::<Self>(base, bigints, c)).unwrap();
+                    });
+                }
             }
         });
         for i in 0..num_chunks {
@@ -286,9 +290,13 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     #[cfg(feature = "parallel")]
     std::thread::scope(|s| {
         for (i, out) in window_sums.iter_mut().enumerate() {
-            s.spawn(move || {
+            if i == window_sums.len() - 1 {
                 process_digit(i, out);
-            });
+            } else {
+                s.spawn(move || {
+                    process_digit(i, out);
+                });
+            }
         }
     });
 
