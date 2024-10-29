@@ -60,13 +60,21 @@ pub trait VariableBaseMSM: ScalarMul {
             return Self::msm_unchecked(bases, scalars);
         }
 
+        let start = std::time::Instant::now();
         let mut bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
         process_digits(&mut bigints, c, num_bits);
+        if bases.len() >= 1 << 19 {
+            println!("Scalars: {}ns", start.elapsed().as_nanos());
+        }
 
         let num_chunks = (num_tasks + digits_count - 1) / digits_count;
         let chunk_size = (size + num_chunks - 1) / num_chunks;
+
+        if bases.len() >= 1 << 19 {
+            println!("{} {}", num_chunks, c);
+        }
 
         let (sender, receiver) = std::sync::mpsc::sync_channel(num_chunks);
         let mut sum = Self::zero();
