@@ -284,7 +284,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     // rayon does quite sub-optimally for this particular instance, and directly
     // spawning threads was faster.
     #[cfg(feature = "parallel")]
-    rayon::scope(|s| {
+    std::thread::scope(|s| {
         for (i, out) in window_sums.iter_mut().enumerate() {
             s.spawn(move |_| {
                 process_digit(i, out);
