@@ -232,6 +232,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
         let window_mask = (1 << c) - 1;
         let sign_mask = 1 << (c - 1);
 
+        let start = std::time::Instant::now();
         for (scalar, base) in scalars.iter().zip(bases) {
             let scalar = scalar.as_ref();
 
@@ -263,13 +264,20 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
                 buckets[(coef & (!sign_mask)) as usize] -= base;
             }
         }
+        if size >= 1 << 19 {
+            println!("Accumulating: {} ns", start.elapsed().as_nanos());
+        }
 
+        let start = std::time::Instant::now();
         let mut running_sum = V::zero();
         *out = V::zero();
         buckets.into_iter().rev().for_each(|b| {
             running_sum += &b;
             *out += &running_sum;
         });
+        if size >= 1 << 19 {
+            println!("Final: {} ns", start.elapsed().as_nanos());
+        }
     };
 
     // The original code uses rayon. Unfortunately, experiments have shown that
@@ -289,6 +297,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
         process_digit(i, out);
     }
 
+    let start = std::time::Instant::now();
     // We store the sum for the highest window.
     let mut total = *window_sums.last().unwrap();
     for i in (0..(window_sums.len() - 1)).rev() {
@@ -296,6 +305,9 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
             total.double_in_place();
         }
         total += &window_sums[i];
+    }
+    if size >= 1 << 19 {
+        println!("Grand final: {} ns", start.elapsed().as_nanos());
     }
 
     total
