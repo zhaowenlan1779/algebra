@@ -82,7 +82,7 @@ pub trait VariableBaseMSM: ScalarMul {
         // The original code uses rayon. Unfortunately, experiments have shown that
         // rayon does quite sub-optimally for this particular instance, and directly
         // spawning threads was faster.
-        std::thread::scope(|s| {
+        rayon::scope(|s| {
             let mut iter_base = bases.chunks(chunk_size);
             let mut iter_bigint = bigints.chunks_mut(chunk_size);
             let sender = &sender;
@@ -92,7 +92,7 @@ pub trait VariableBaseMSM: ScalarMul {
                 if i == num_chunks - 1 {
                     sender.send(msm_bigint_wnaf_body::<Self>(base, bigints, c)).unwrap();
                 } else {
-                    s.spawn(move || {
+                    s.spawn(move |_| {
                         sender.send(msm_bigint_wnaf_body::<Self>(base, bigints, c)).unwrap();
                     });
                 }
@@ -269,7 +269,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
             }
         }
         if size >= 1 << 19 {
-            println!("Accumulating: {} ns", start.elapsed().as_nanos());
+            println!("Accumulating {:?}: {} ns", std::thread::current().id(), start.elapsed().as_nanos());
         }
 
         let start = std::time::Instant::now();
