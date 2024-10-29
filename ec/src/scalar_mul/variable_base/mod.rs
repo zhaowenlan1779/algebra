@@ -107,7 +107,7 @@ pub trait VariableBaseMSM: ScalarMul {
 
     fn msm_unchecked_par_auto(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
         #[cfg(feature = "parallel")]
-        let num_tasks = std::thread::available_parallelism().unwrap().get();
+        let num_tasks = rayon::current_num_threads();
         #[cfg(not(feature = "parallel"))]
         let num_tasks = 1;
 
@@ -288,13 +288,13 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     // rayon does quite sub-optimally for this particular instance, and directly
     // spawning threads was faster.
     #[cfg(feature = "parallel")]
-    std::thread::scope(|s| {
+    rayon::scope(|s| {
         let len = window_sums.len();
         for (i, out) in window_sums.iter_mut().enumerate() {
             if i == len - 1 {
                 process_digit(i, out);
             } else {
-                s.spawn(move || {
+                s.spawn(move |_| {
                     process_digit(i, out);
                 });
             }
