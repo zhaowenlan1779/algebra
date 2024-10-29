@@ -18,10 +18,14 @@ pub trait VariableBaseMSM: ScalarMul {
     ///
     /// Reference: [`VariableBaseMSM::msm`]
     fn msm_unchecked(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
-        let bigints = cfg_into_iter!(scalars)
+        let mut bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
-        Self::msm_bigint(bases, &bigints)
+        if Self::NEGATION_IS_CHEAP {
+            msm_bigint_wnaf(bases, &mut bigints)
+        } else {
+            msm_bigint(bases, &bigints)
+        }
     }
 
     #[cfg(not(feature = "parallel"))]
@@ -109,10 +113,11 @@ pub trait VariableBaseMSM: ScalarMul {
         bases: &[Self::MulBase],
         bigints: &[<Self::ScalarField as PrimeField>::BigInt],
     ) -> Self {
+        let mut bigints = bigints.to_vec();
         if Self::NEGATION_IS_CHEAP {
-            msm_bigint_wnaf(bases, bigints)
+            msm_bigint_wnaf(bases, &mut bigints)
         } else {
-            msm_bigint(bases, bigints)
+            msm_bigint(bases, &bigints)
         }
     }
 
@@ -163,21 +168,21 @@ fn compute_c(size: usize, _num_bits: usize) -> usize {
 // Compute msm using windowed non-adjacent form
 fn msm_bigint_wnaf<V: VariableBaseMSM>(
     bases: &[V::MulBase],
-    bigints: &[<V::ScalarField as PrimeField>::BigInt],
+    bigints: &mut [<V::ScalarField as PrimeField>::BigInt],
 ) -> V {
     let size = ark_std::cmp::min(bases.len(), bigints.len());
-    let scalars = &bigints[..size];
+    let scalars = &mut bigints[..size];
     let bases = &bases[..size];
 
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
     let c = compute_c(size, num_bits);
     let digits_count = (num_bits + c - 1) / c;
 
-    let start = std::time::Instant::now();
-    let scalar_digits = make_digits(scalars, c, num_bits);
-    if size >= 1 << 19 {
-        println!("Scalar digits: {} ns", start.elapsed().as_nanos());
-    }
+    // let start = std::time::Instant::now();
+    process_digits(scalars, c, num_bits);
+    // if size >= 1 << 19 {
+        // println!("Scalar digits: {} ns", start.elapsed().as_nanos());
+    // }
     let zero = V::zero();
     let mut window_sums = vec![zero; digits_count];
 
@@ -189,14 +194,43 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
         } else {
             vec![zero; 1 << (c - 1)]
         };
-        for (digit, base) in scalar_digits[i * size..(i + 1) * size].iter().zip(bases) {
-            use ark_std::cmp::Ordering;
-            // digits is the digits thing of the first scalar?
-            let scalar = *digit;
-            match 0.cmp(&scalar) {
-                Ordering::Less => buckets[(scalar - 1) as usize] += base,
-                Ordering::Greater => buckets[(-scalar - 1) as usize] -= base,
-                Ordering::Equal => (),
+        let bit_offset = i * c;
+        let u64_idx = bit_offset / 64;
+        let bit_idx = bit_offset % 64;
+
+        let is_multi_word = bit_idx >= 64 - c && i != digits_count - 1;
+        let window_mask = (1 << c) - 1;
+        let sign_mask = 1 << (c - 1);
+
+        for (scalar, base) in scalars.iter().zip(bases) {
+            let scalar = scalar.as_ref();
+
+            if i == digits_count - 1 {
+                let coef = scalar[u64_idx] >> bit_idx;
+                if coef != 0 {
+                    buckets[(coef - 1) as usize] += base;
+                }
+                continue;
+            }
+
+            let bit_buf = if is_multi_word {
+                // Combine the current u64's bits with the bits from the next u64
+                (scalar[u64_idx] >> bit_idx) | (scalar[1 + u64_idx] << (64 - bit_idx))
+            } else {
+                // This window's bits are contained in a single u64,
+                // or it's the last u64 anyway.
+                scalar[u64_idx] >> bit_idx
+            };
+            let coef = bit_buf & window_mask;
+
+            if coef == 0 {
+                continue;
+            }
+
+            if coef & sign_mask == 0 {
+                buckets[(coef - 1) as usize] += base;
+            } else {
+                buckets[(coef & (!sign_mask)) as usize] -= base;
             }
         }
 
@@ -324,30 +358,29 @@ fn msm_bigint<V: VariableBaseMSM>(
     total
 }
 
-fn make_digits<BigInt: BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> Vec<i64> {
+fn process_digits<BigInt: BigInteger>(a: &mut [BigInt], w: usize, num_bits: usize) {
     let radix: u64 = 1 << w;
+    let sign_mask: u64 = 1 << (w - 1);
     let window_mask: u64 = radix - 1;
     let digits_count = (num_bits + w - 1) / w;
 
-    let mut digits = vec![0i64; digits_count * a.len()];
-
-    for (j, scalar) in a.iter().enumerate() {
-        let scalar = scalar.as_ref();
+    ark_std::cfg_iter_mut!(a).for_each(|scalar| {
+        let scalar = scalar.as_mut();
         let mut carry = 0u64;
-
         for i in 0..digits_count {
             // Construct a buffer of bits of the scalar, starting at `bit_offset`.
             let bit_offset = i * w;
             let u64_idx = bit_offset / 64;
             let bit_idx = bit_offset % 64;
+
             // Read the bits from the scalar
-            let bit_buf = if bit_idx < 64 - w || u64_idx == scalar.len() - 1 {
-                // This window's bits are contained in a single u64,
-                // or it's the last u64 anyway.
-                scalar[u64_idx] >> bit_idx
-            } else {
+            let is_multi_word = bit_idx >= 64 - w && u64_idx != scalar.len() - 1;
+
+            let bit_buf = if is_multi_word {
                 // Combine the current u64's bits with the bits from the next u64
                 (scalar[u64_idx] >> bit_idx) | (scalar[1 + u64_idx] << (64 - bit_idx))
+            } else {
+                scalar[u64_idx] >> bit_idx
             };
 
             // Read the actual coefficient value from the window
@@ -355,13 +388,28 @@ fn make_digits<BigInt: BigInteger>(a: &[BigInt], w: usize, num_bits: usize) -> V
 
             // Recenter coefficients from [0,2^w) to [-2^w/2, 2^w/2)
             carry = (coef + radix / 2) >> w;
-            digits[i * a.len() + j] = (coef as i64) - (carry << w) as i64;
+
+            let val = if i == digits_count - 1 {
+                // Cannot borrow anything for the last digit
+                coef as i64
+            } else {
+                coef as i64 - (carry << w) as i64
+            };
+
+            let val = if val >= 0 {
+                val as u64
+            } else {
+                (-val - 1) as u64 | sign_mask
+            };
+
+            let read_mask = window_mask << bit_idx;
+            scalar[u64_idx] = (scalar[u64_idx] & (!read_mask)) | (val << bit_idx);
+            if is_multi_word {
+                let len = w - (64 - bit_idx);
+                // Write to the bottom of the next word
+                scalar[1 + u64_idx] = ((scalar[1 + u64_idx] >> len) << len)
+                    | (val >> (64 - bit_idx));
+            }
         }
-
-        // Restore the carry for the last digit
-        // The last digit is in [0, 2^w)
-        digits[(digits_count - 1) * a.len() + j] += (carry << w) as i64;
-    }
-
-    digits
+    });
 }
