@@ -72,9 +72,9 @@ pub trait VariableBaseMSM: ScalarMul {
         // The original code uses rayon. Unfortunately, experiments have shown that
         // rayon does quite sub-optimally for this particular instance, and directly
         // spawning threads was faster.
-        std::thread::scope(|s| {
+        rayon::scope(|s| {
             for i in 0..num_chunks {
-                s.spawn(move || {
+                s.spawn(move |_| {
                     process_chunk(i);
                 });
             }
@@ -256,9 +256,9 @@ fn msm_bigint_wnaf<V: VariableBaseMSM>(
     // rayon does quite sub-optimally for this particular instance, and directly
     // spawning threads was faster.
     #[cfg(feature = "parallel")]
-    std::thread::scope(|s| {
+    rayon::scope(|s| {
         for (i, out) in window_sums.iter_mut().enumerate() {
-            s.spawn(move || {
+            s.spawn(move |_| {
                 process_digit(i, out);
             });
         }
