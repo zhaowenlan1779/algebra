@@ -286,7 +286,7 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     #[cfg(feature = "parallel")]
     std::thread::scope(|s| {
         for (i, out) in window_sums.iter_mut().enumerate() {
-            s.spawn(move |_| {
+            s.spawn(move || {
                 process_digit(i, out);
             });
         }
