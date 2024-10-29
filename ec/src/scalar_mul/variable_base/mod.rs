@@ -18,13 +18,9 @@ pub trait VariableBaseMSM: ScalarMul {
     ///
     /// Reference: [`VariableBaseMSM::msm`]
     fn msm_unchecked(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
-        let start = std::time::Instant::now();
         let mut bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
-        if bases.len() >= 1 << 19 {
-            println!("Into bigint: {}ns", start.elapsed().as_nanos());
-        }
         if Self::NEGATION_IS_CHEAP {
             let num_bits = Self::ScalarField::MODULUS_BIT_SIZE as usize;
             let size = ark_std::cmp::min(bases.len(), bigints.len());
@@ -60,21 +56,13 @@ pub trait VariableBaseMSM: ScalarMul {
             return Self::msm_unchecked(bases, scalars);
         }
 
-        let start = std::time::Instant::now();
         let mut bigints = cfg_into_iter!(scalars)
             .map(|s| s.into_bigint())
             .collect::<Vec<_>>();
         process_digits(&mut bigints, c, num_bits);
-        if bases.len() >= 1 << 19 {
-            println!("Scalars: {}ns", start.elapsed().as_nanos());
-        }
 
         let num_chunks = (num_tasks + digits_count - 1) / digits_count;
         let chunk_size = (size + num_chunks - 1) / num_chunks;
-
-        if bases.len() >= 1 << 19 {
-            println!("{} {}", num_chunks, c);
-        }
 
         let (sender, receiver) = std::sync::mpsc::sync_channel(num_chunks);
         let mut sum = Self::zero();
@@ -210,14 +198,8 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
     let bases = &bases[..size];
 
     let num_bits = V::ScalarField::MODULUS_BIT_SIZE as usize;
-    // let c = compute_c(size, num_bits);
     let digits_count = (num_bits + c - 1) / c;
 
-    // let start = std::time::Instant::now();
-    // process_digits(scalars, c, num_bits);
-    // if size >= 1 << 19 {
-        // println!("Scalar digits: {} ns", start.elapsed().as_nanos());
-    // }
     let mut window_sums = vec![V::zero(); digits_count];
 
     let process_digit = |i: usize, out: &mut V| {
@@ -236,7 +218,6 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
         let window_mask = (1 << c) - 1;
         let sign_mask = 1 << (c - 1);
 
-        let start = std::time::Instant::now();
         for (scalar, base) in scalars.iter().zip(bases) {
             let scalar = scalar.as_ref();
 
@@ -268,20 +249,13 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
                 buckets[(coef & (!sign_mask)) as usize] -= base;
             }
         }
-        if size >= 1 << 19 {
-            println!("Accumulating {:?}: {} ns", std::thread::current().id(), start.elapsed().as_nanos());
-        }
 
-        let start = std::time::Instant::now();
         let mut running_sum = V::zero();
         *out = V::zero();
         buckets.into_iter().rev().for_each(|b| {
             running_sum += &b;
             *out += &running_sum;
         });
-        if size >= 1 << 19 {
-            println!("Final: {} ns", start.elapsed().as_nanos());
-        }
     };
 
     // The original code uses rayon. Unfortunately, experiments have shown that
@@ -306,7 +280,6 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
         process_digit(i, out);
     }
 
-    let start = std::time::Instant::now();
     // We store the sum for the highest window.
     let mut total = *window_sums.last().unwrap();
     for i in (0..(window_sums.len() - 1)).rev() {
@@ -314,9 +287,6 @@ fn msm_bigint_wnaf_body<V: VariableBaseMSM>(
             total.double_in_place();
         }
         total += &window_sums[i];
-    }
-    if size >= 1 << 19 {
-        println!("Grand final: {} ns", start.elapsed().as_nanos());
     }
 
     total
