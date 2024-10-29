@@ -161,7 +161,17 @@ fn compute_c(size: usize, _num_bits: usize) -> usize {
     if size < 32 {
         3
     } else {
-        super::ln_without_floats(size) + 3
+        let c = (ark_std::cmp::max(ark_std::log2(size) - ark_std::log2(ark_std::log2(size) as usize), 4) - 1 ..= ark_std::log2(size))
+            .map(|c| (c, (size + (1 << (c as usize))) / (c as usize)))
+            .min_by_key(|(_, cost)| *cost)
+            .unwrap()
+            .0 as usize;
+        // gnark did not implement c = 17 - 19. 16 is a great point as it's well aligned.
+        if c > 16 && c < 20 {
+            16
+        } else {
+            c
+        }
     }
 }
 
