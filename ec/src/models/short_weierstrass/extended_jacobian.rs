@@ -218,7 +218,7 @@ impl<P: SWCurveConfig> Group for ExtendedJacobian<P> {
 
         s -= &self.x;
         w.neg_in_place();
-        self.y = P::BaseField::sum_of_products(&[m, s], &[self.y, w]);
+        self.y = P::BaseField::sum_of_products(&[m, self.y], &[s, w]);
 
         self
     }
@@ -329,7 +329,7 @@ impl<P: SWCurveConfig, T: Borrow<Affine<P>>> AddAssign<T> for ExtendedJacobian<P
                 // Y3 = R*(Q-X3)-Y1*PPP
                 q -= &self.x;
                 self.y.neg_in_place();
-                self.y = P::BaseField::sum_of_products(&[s2, q], &[pp, self.y]);
+                self.y = P::BaseField::sum_of_products(&[s2, pp], &[q, self.y]);
             }
         }
     }
@@ -429,7 +429,7 @@ impl<'a, P: SWCurveConfig> AddAssign<&'a Self> for ExtendedJacobian<P> {
 
             q -= &self.x;
             s1.neg_in_place();
-            self.y = P::BaseField::sum_of_products(&[s2, q], &[s1, pp]);
+            self.y = P::BaseField::sum_of_products(&[s2, s1], &[q, pp]);
         }
     }
 }
