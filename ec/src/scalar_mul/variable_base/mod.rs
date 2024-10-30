@@ -95,7 +95,7 @@ pub trait VariableBaseMSM: ScalarMul {
 
     fn msm_unchecked_par_auto(bases: &[Self::MulBase], scalars: &[Self::ScalarField]) -> Self {
         #[cfg(feature = "parallel")]
-        let num_tasks = rayon::current_num_threads();
+        let num_tasks = std::thread::available_parallelism().unwrap().get();
         #[cfg(not(feature = "parallel"))]
         let num_tasks = 1;
 
