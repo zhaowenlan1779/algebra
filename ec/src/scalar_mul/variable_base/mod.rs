@@ -179,7 +179,7 @@ fn compute_c(size: usize, _num_bits: usize) -> usize {
             .unwrap()
             .0 as usize;
         // gnark did not implement c = 17 - 19. 16 is a great point as it's well aligned.
-        if c > 16 && c < 20 {
+        if c > 16 {
             16
         } else {
             c
