@@ -65,7 +65,7 @@ pub(super) fn square_in_place_impl(
         quote!({
             *a *= *a;
         })
-    } else if (2..=6).contains(&num_limbs) && can_use_no_carry_mul_opt {
+    } else if (2..=4).contains(&num_limbs) && can_use_no_carry_mul_opt {
         body.extend(quote!({
             if cfg!(all(
                 feature = "asm",
